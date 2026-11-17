@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gantt Fitosanitario</title>
+<style>
+:root{--g:#1b5e20;--g2:#2e7d32;--bg:#f3f5f3;--bd:#dfe4df;--tx:#1d2b1f}
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;color:var(--tx);background:var(--bg);display:flex;height:100vh}
+nav{width:200px;background:var(--g);color:#fff;padding:14px 8px;flex-shrink:0}
+nav h1{font-size:15px;margin:0 8px 14px}nav button{display:block;width:100%;text-align:left;background:none;border:0;color:#d7ecd8;padding:10px;border-radius:8px;cursor:pointer;font-size:14px}
+nav button.on,nav button:hover{background:#ffffff22;color:#fff}
+main{flex:1;overflow:auto;padding:16px}
+.demo{background:#fff8e1;border:1px solid #ffe082;padding:6px 10px;border-radius:8px;margin-bottom:12px;font-size:12px}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+button.b,select,input{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff}
+button.b{cursor:pointer}button.p{background:var(--g2);color:#fff;border-color:var(--g2)}button.d{color:#c62828}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.card,.box{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:12px}
+.card b{display:block;font-size:24px;color:var(--g2)}
+.gantt{background:#fff;border:1px solid var(--bd);border-radius:12px;overflow:hidden;min-width:720px}
+.gr{display:grid;grid-template-columns:150px 1fr;border-top:1px solid var(--bd)}
+.gh{background:#e8f0e8;font-weight:600;border-top:0}
+.gl{padding:8px;border-right:1px solid var(--bd);font-size:13px}.gl small{display:block;color:#667}
+.dys{position:relative;display:grid;grid-template-columns:repeat(6,1fr)}
+.dys>i{border-right:1px solid var(--bd);min-height:34px}.gh .dys>div{padding:6px;text-align:center;border-right:1px solid var(--bd)}
+.ev{position:absolute;height:24px;border-radius:6px;padding:2px 8px;font-size:12px;overflow:hidden;white-space:nowrap;cursor:grab;touch-action:none;user-select:none;box-shadow:0 1px 2px #0003}
+.ev.rp{text-decoration:line-through;opacity:.55}.ev .h{position:absolute;right:0;top:0;bottom:0;width:8px;cursor:ew-resize;background:#0003}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--bd);border-radius:12px}th,td{padding:7px 9px;border-bottom:1px solid var(--bd);text-align:left}th{background:#e8f0e8}
+.tag{font-size:11px;padding:1px 6px;border-radius:10px;background:#ffcdd2;color:#b71c1c}.tag.ok{background:#c8e6c9;color:#1b5e20}
+#side{position:fixed;right:0;top:0;bottom:0;width:340px;background:#fff;border-left:1px solid var(--bd);box-shadow:-4px 0 12px #0002;padding:16px;overflow:auto;transform:translateX(100%);transition:.2s}
+#side.open{transform:none}#side label{display:block;margin:8px 0 2px;font-size:12px;color:#556}#side input,#side select{width:100%}
+#st{position:fixed;left:210px;bottom:8px;font-size:12px;padding:3px 10px;border-radius:12px;background:#fff;border:1px solid var(--bd);display:none;z-index:9}.x{position:absolute;top:8px;right:10px;border:0;background:#eee;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer}#sb h3{margin-top:4px;padding-right:36px}.res{background:#e8f5e9;border-radius:8px;padding:8px;margin-top:8px}
+.hb{height:14px;background:var(--g2);border-radius:4px}
+.sg{padding:6px 8px;border:1px solid var(--bd);border-top:0;cursor:pointer;background:#fff}.sg:hover{background:#e8f5e9}.sg small{color:#667}</style><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script></head><body>
+<nav><h1>🫐 Programación<br>Fitosanitaria</h1><div id="menu"></div></nav>
+<main><div class="demo">⚠ DATOS DE EJEMPLO: productos, dosis y hectáreas son ilustrativos. Se reemplazan al cargar el Excel real.</div><div id="v"></div></main>
+<div id="st"></div><aside id="side"><button class="x" onclick="$('#side').classList.remove('open')" title="Cerrar">✕</button><div id="sb"></div></aside>
+<script>
+/* ===== Utilidades ===== */
+const $=s=>document.querySelector(s),DAYS=['Lun','Mar','Mié','Jue','Vie','Sáb'];
+const iso=d=>d.toISOString().slice(0,10),add=(s,n)=>{const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return iso(d)};
+const monday=(y,w)=>{const j=new Date(Date.UTC(y,0,4)),d=j.getUTCDay()||7;j.setUTCDate(j.getUTCDate()-d+1+(w-1)*7);return iso(j)};
+const isoWeek=d=>{d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-n);const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return[d.getUTCFullYear(),Math.ceil(((d-y)/864e5+1)/7)]};
+const dayIdx=(s,m)=>Math.round((new Date(s)-new Date(m))/864e5);
+const uid=()=>Math.random().toString(36).slice(2,9);
+const tc=h=>{const n=parseInt(h.slice(1),16);return((n>>16)*299+((n>>8)&255)*587+(n&255)*114)/1000>150?'#111':'#fff'};
+function calc(d,u,moj,cap,ha){const[n,den]=u.split('/'),b={mL:1,L:1000,g:1,kg:1000}[n];if(!b||!['cil','L','ha'].includes(den))return null;
+ const cph=moj/cap;const ph=den=='cil'?d*b*cph:den=='L'?d*b*moj:d*b;return{cph,pc:ph/cph,ph,tot:ph*ha,cil:Math.ceil(cph*ha),u:(n=='mL'||n=='L')?'mL':'g'}}
+const big=(v,u)=>v>=1000?(v/1000).toFixed(2)+(u=='mL'?' L':' kg'):(+v.toFixed(2))+' '+u;
+const API_URL='PEGA_AQUI_LA_URL_DE_LA_APLICACION_WEB';   // URL de Apps Script (termina en /exec)
+const hasAPI=/^https:\/\//.test(API_URL),MAPA={moverProducto:'guardarItem',guardarProgramacion:'guardarItem',reemplazarProducto:'guardarItems'};
+let CFG={};try{CFG=JSON.parse(localStorage.getItem('gfCFG'))||{}}catch(e){}
+const call=(a,p)=>fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({accion:a,payload:p,clave:CFG.clave,usr:CFG.nombre})}).then(r=>r.json());
+let stT,Q=Promise.resolve(),pend=0;function status(m,err){const e=$('#st');e.textContent=m;e.style.display='block';e.style.color=err?'#c62828':'#2e7d32';clearTimeout(stT);if(!err&&m.includes('✓'))stT=setTimeout(()=>e.style.display='none',2000)}
+function sv(a,p){if(!hasAPI)return;a=MAPA[a]||a;if(a=='guardarItems')p=[p.i,p.n];p=JSON.parse(JSON.stringify(p));pend++;status('Guardando…');
+ Q=Q.then(()=>call(a,p)).then(r=>{if(!r.ok)throw new Error(r.error)}).then(()=>{pend--;if(!pend)status('Guardado ✓')},e=>{pend--;status('Error al guardar: '+e.message,1)})}
+/* ===== Datos de ejemplo ===== */
+const [Y0,W0]=isoWeek(new Date());
+const S={y:Y0,w:W0,tab:'gantt',cap:200,f:'PROG',
+ sec:[['O1E1','Olmos 1 - Equipo 1','Olmos 1',10],['O1E2','Olmos 1 - Equipo 2','Olmos 1',12],['O2E1','Olmos 2 - Equipo 1','Olmos 2',8],
+      ['O2E2','Olmos 2 - Equipo 2','Olmos 2',9],['O3E1','Olmos 3 - Equipo 1','Olmos 3',11],['O3E2','Olmos 3 - Equipo 2','Olmos 3',7],['JV','Jardín Varietal','Jardín Varietal',2]]
+  .map(a=>({id:a[0],nombre:a[1],fundo:a[2],ha:a[3],act:true})),
+ prod:[['CAP Ajo','L/cil',1,'#43a047',12],['Fitoplasus','L/cil',0.5,'#8e24aa',18],['Acidificador','L/cil',0.3,'#fdd835',3.5],['Botamisol','kg/cil',0.2,'#1e88e5',45],['Alcalig Duo','L/ha',2,'#fb8c00',9]]
+  .map(a=>({id:a[0],nombre:a[0],u:a[1],dosis:a[2],min:'',max:'',moj:1000,pr:a[4],color:a[3],aut:true})),
+ it:[],hist:[]};
+const M0=monday(S.y,S.w);
+[['O1E1','CAP Ajo',0,2],['O1E1','Acidificador',0,1],['O1E1','Botamisol',1,3],['O1E2','Fitoplasus',1,3],['O1E2','Alcalig Duo',2,4],['O2E1','CAP Ajo',3,5]]
+ .forEach(a=>{const p=S.prod.find(x=>x.id==a[1]);S.it.push({id:uid(),sec:a[0],pid:p.id,nombre:p.nombre,reg:true,ini:add(M0,a[2]),fin:add(M0,a[3]),d0:p.dosis,d:p.dosis,u:p.u,moj:p.moj,est:'ACTIVO',obs:''})});
+const log=(tipo,it,x={})=>{const e=Object.assign({f:new Date().toLocaleString(),tipo,sec:it.sec,prod:it.nombre,usr:CFG.nombre||'usuario'},x);S.hist.unshift(e);sv('historial',e)};
+const col=n=>(S.prod.find(p=>p.id==n)||{color:'#9e9e9e'}).color;
+const weekItems=()=>{const m=monday(S.y,S.w),e=add(m,5);return S.it.filter(i=>(S.f=='TODO'?i.est!='ELIMINADO':i.est=='ACTIVO')&&i.ini<=e&&i.fin>=m)};
+
+/* ===== Navegación ===== */
+const TABS=[['dash','📊 Dashboard'],['gantt','📅 Gantt semanal'],['prog','🧪 Programación'],['maes','📦 Maestro de productos'],['sect','🏢 Sectores'],['hist','🕘 Historial'],['conf','⚙ Configuración']];
+function go(t){S.tab=t;$('#side').classList.remove('open');$('#menu').innerHTML=TABS.map(x=>`<button class="${x[0]==t?'on':''}" onclick="go('${x[0]}')">${x[1]}</button>`).join('');
+ ({dash:vDash,gantt:vGantt,prog:vProg,maes:vMaes,sect:vSect,hist:vHist,conf:vConf})[t]()}
+const V=h=>$('#v').innerHTML=h;
+const weekBar=()=>`<div class="bar"><button class="b" onclick="wk(-1)">◀</button><b>Semana</b><input type="number" id="sw" value="${S.w}" min="1" max="53" style="width:64px" onchange="S.w=+this.value;go(S.tab)">
+ <input type="number" id="sy" value="${S.y}" style="width:80px" onchange="S.y=+this.value;go(S.tab)"><button class="b" onclick="wk(1)">▶</button><button class="b" onclick="wk(0)">Hoy</button>
+ <select onchange="S.f=this.value;go(S.tab)"><option value="PROG" ${S.f=='PROG'?'selected':''}>Programado</option><option value="TODO" ${S.f=='TODO'?'selected':''}>Todo (incl. reprogramados)</option></select> <span>${monday(S.y,S.w)} → ${add(monday(S.y,S.w),5)}</span></div>`;
+function wk(n){if(!n){[S.y,S.w]=isoWeek(new Date())}else{const m=add(monday(S.y,S.w),7*n);[S.y,S.w]=isoWeek(new Date(m+'T12:00:00'))}go(S.tab)}
+
+/* ===== Dashboard ===== */
+function vDash(){const it=weekItems(),secs=new Set(it.map(i=>i.sec)),ha=[...secs].reduce((a,s)=>a+(S.sec.find(x=>x.id==s)?.ha||0),0);
+ const cnt={};S.it.filter(i=>i.est!='ELIMINADO').forEach(i=>cnt[i.nombre]=(cnt[i.nombre]||0)+1);
+ const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1]),mx=top[0]?top[0][1]:1,wkc={};
+ S.it.filter(i=>i.est!='ELIMINADO').forEach(i=>{const k=isoWeek(new Date(i.ini+'T12:00:00'))[1];wkc['Sem '+k]=(wkc['Sem '+k]||0)+1});
+ const bars=o=>Object.entries(o).map(([k,v])=>`<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span style="width:110px">${k}</span><div class="hb" style="width:${v/Math.max(...Object.values(o))*60}%"></div>${v}</div>`).join('');
+ V(weekBar()+`<div class="cards">${[['Sectores programados',secs.size],['Productos programados',it.length],['Paquetes',secs.size],['Hectáreas',ha],
+ ['Modificadas',S.hist.filter(h=>h.tipo!='CREACION').length],['No registrados',it.filter(i=>!i.reg).length]].map(c=>`<div class="card">${c[0]}<b>${c[1]}</b></div>`).join('')}</div>
+ <div class="cards" style="grid-template-columns:1fr 1fr"><div class="box"><b>Productos más utilizados</b>${bars(Object.fromEntries(top))}</div><div class="box"><b>Aplicaciones por semana</b>${bars(wkc)}</div></div>`)}
+
+/* ===== Gantt ===== */
+function vGantt(){const m=monday(S.y,S.w),its=weekItems();
+ let h=weekBar()+`<div class="gantt"><div class="gr gh"><div class="gl">Sector</div><div class="dys">${DAYS.map((d,i)=>`<div>${d} ${add(m,i).slice(8)}</div>`).join('')}</div></div>`;
+ S.sec.filter(s=>s.act).forEach(s=>{const l=its.filter(i=>i.sec==s.id);h+=`<div class="gr"><div class="gl"><b>${s.id}</b><small>${s.ha} ha</small></div>
+  <div class="dys" data-s="${s.id}" style="min-height:${Math.max(1,l.length)*28+8}px">${'<i></i>'.repeat(6)}${l.map((i,k)=>{const a=Math.max(0,dayIdx(i.ini,m)),b=Math.min(5,dayIdx(i.fin,m)),c=col(i.pid);
+  return`<div class="ev ${i.est=='REPROGRAMADO'?'rp':''}" data-i="${i.id}" style="left:calc(${a}*100%/6 + 2px);width:calc(${b-a+1}*100%/6 - 4px);top:${4+k*28}px;background:${c};color:${tc(c)}">${i.nombre}${i.reg?'':' ⚠'}${i.est=='REPROGRAMADO'?' · REPROG.':''}<span class="h"></span></div>`}).join('')}</div></div>`});
+ V(h+'</div><p style="color:#667">Clic en una celda vacía = nueva programación · arrastra una barra para mover · arrastra el borde derecho para extender · clic en la barra = ficha.</p>');
+ document.querySelectorAll('.dys[data-s]').forEach(z=>z.addEventListener('click',e=>{if(e.target.tagName=='I'){const r=z.getBoundingClientRect();addDlg(z.dataset.s,Math.floor((e.clientX-r.left)/r.width*6))}}));
+ document.querySelectorAll('.ev').forEach(el=>el.addEventListener('pointerdown',e=>drag(e,el)))}
+function drag(e,el){const it=S.it.find(x=>x.id==el.dataset.i),m=monday(S.y,S.w),w=el.parentElement.getBoundingClientRect().width/6,rs=e.target.classList.contains('h'),x0=e.clientX;
+ let dd=0;el.setPointerCapture(e.pointerId);el.style.cursor='grabbing';
+ const mv=ev=>{dd=Math.round((ev.clientX-x0)/w);const a=dayIdx(it.ini,m),b=dayIdx(it.fin,m);
+  if(rs){dd=Math.max(dd,a-b);dd=Math.min(dd,5-b);el.style.width=`calc(${b-a+1+dd}*100%/6 - 4px)`}else{dd=Math.max(dd,-a);dd=Math.min(dd,5-b);el.style.left=`calc(${a+dd}*100%/6 + 2px)`}};
+ const up=ev=>{el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);
+  if(Math.abs(ev.clientX-x0)<5){openSide(it.id);return}
+  if(!dd){go('gantt');return}const o=it.ini+' a '+it.fin;if(rs)it.fin=add(it.fin,dd);else{it.ini=add(it.ini,dd);it.fin=add(it.fin,dd)}
+  log(rs?'DURACION':'CAMBIO_FECHAS',it,{ant:o,nue:it.ini+' a '+it.fin,motivo:'Arrastre en Gantt'});sv('moverProducto',it);go('gantt')};
+ el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up)}
+
+/* ===== Nueva programación (buscador + no registrado) ===== */
+function addDlg(sec,di){S.asec=sec;S.lq=null;F.a=null;const m=monday(S.y,S.w);$('#sb').innerHTML=`<h3>Nueva programación · ${sec}</h3><label>Buscar producto</label><input id="q" autocomplete="off" placeholder="Nombre, ingrediente o código" oninput="sugg();qInfo()"><div id="sg"></div>
+ <div id="qi"></div>
+ <label>Inicio</label><input type="date" id="ai" value="${add(m,di)}"><label>Término</label><input type="date" id="af" value="${add(m,di)}">
+ <p><button class="b p" onclick="addOk('${sec}')">Agregar</button> <button class="b" onclick="$('#side').classList.remove('open')">Cancelar</button></p>`;$('#side').classList.add('open')}
+const F={},ubase=u=>['mL','L'].includes(u.split('/')[0])?'mL':'g';
+const pcs=(i,r)=>{const p=S.prod.find(x=>x.id==i.pid);return p&&p.pr!=null?`<br>Precio/ha: <b>US$ ${(r.ph/1000*p.pr).toFixed(2)}</b> · Costo total: <b>US$ ${(r.tot/1000*p.pr).toFixed(2)}</b>`:''};
+const nuOf=u=>u.split('/')[0],fB=n=>({mL:1,L:1000,g:1,kg:1000})[n];
+function ffields(pre,p,ha){F[pre]=p;const nu=nuOf(p.u),b=fB(nu),r=p.dosis===''?null:calc(+p.dosis,p.u,p.moj,S.cap,ha),v=x=>r?+(x/b).toFixed(4):'',pn=['mL','L'].includes(nu)?'L':'kg';
+ return `<label>Dosis/cilindro (${nu})</label><input type="number" step="any" id="${pre}dc" value="${v(r?r.pc:0)}" oninput="fc('${pre}','dc')">
+ <label>Mojamiento (L/ha)</label><input type="number" id="${pre}mj" value="${p.moj}" oninput="fc('${pre}','mj')">
+ <label>Hectáreas</label><input type="number" step="any" id="${pre}ha" value="${ha}" oninput="fc('${pre}','ha')">
+ <label>Dosis/ha (${nu})</label><input type="number" step="any" id="${pre}dh" value="${v(r?r.ph:0)}" oninput="fc('${pre}','dh')">
+ <label>Precio por ${pn} (USD) 🔒</label><input id="${pre}pl" readonly style="background:#eee">
+ <label>Precio por ha (USD) 🔒</label><input id="${pre}pa" readonly style="background:#eee"><div class="res" id="${pre}rs"></div>`}
+function fc(pre,src){const p=F[pre],nu=nuOf(p.u),b=fB(nu),g=k=>$('#'+pre+k),n=k=>g(k).value===''?NaN:+g(k).value,cph=n('mj')/S.cap,f=x=>isFinite(x)?+x.toFixed(4):'';
+ if(src=='dh')g('dc').value=f(n('dh')/cph);else if(src!='ha')g('dh').value=f(n('dc')*cph);
+ const dh=n('dh'),ha=n('ha'),k=['L','kg'].includes(nu)?1:.001,pa=p.pr!=null&&p.pr!==''?dh*k*p.pr:NaN,ub=['mL','L'].includes(nu)?'mL':'g';
+ g('pl').value=p.pr!=null&&p.pr!==''?p.pr:'—';g('pa').value=isFinite(pa)?pa.toFixed(2):'—';
+ g('rs').innerHTML=isFinite(dh*ha)?`Cilindros/ha: <b>${+cph.toFixed(2)}</b> · Cilindros totales: <b>${Math.ceil(cph*ha)}</b><br>Total requerido: <b>${big(dh*ha*b,ub)}</b>${isFinite(pa)?`<br>Costo total: <b>US$ ${(pa*ha).toFixed(2)}</b>`:''}`:'Completa la dosis para calcular.'}
+function fval(pre){const p=F[pre],den=p.u.split('/')[1],dc=$('#'+pre+'dc').value,dh=$('#'+pre+'dh').value,x=den=='ha'?dh:dc,d=x===''?'':+(den=='L'?+x/S.cap:+x).toPrecision(6);
+ return{d,moj:+$('#'+pre+'mj').value,ha:+$('#'+pre+'ha').value}}
+function qInfo(){const n=$('#q').value.trim();if(n==S.lq)return;S.lq=n;const p=S.prod.find(x=>norm(x.nombre)==norm(n)),ha=S.sec.find(x=>x.id==S.asec).ha;
+ if(!n){$('#qi').innerHTML='';return}
+ $('#qi').innerHTML=p?(p.aut?'':'<div class="res" style="background:#fff3e0"><span class="tag">NO AUTORIZADO</span> Producto del maestro sin autorización vigente.</div>')+ffields('a',p,ha):`<div class="res" style="background:#ffebee"><span class="tag">PRODUCTO NO REGISTRADO</span><br>Se agregará como no autorizado. Ingresa la dosis manualmente.<br><button class="b" onclick="solicita()">Solicitar incorporación al maestro</button></div>`+ffields('a',{u:'mL/cil',dosis:'',moj:S.cap,pr:null},ha);fc('a','dc')}
+function solicita(){log('SOLICITUD_PRODUCTO',{sec:'-',nombre:$('#q').value},{motivo:'Solicitud de incorporación al maestro'});alert('Solicitud registrada en el historial.')}
+function addOk(sec){const n=$('#q').value.trim(),p=S.prod.find(x=>norm(x.nombre)==norm(n));if(!n||!F.a||$('#af').value<$('#ai').value)return alert('Revisa producto y fechas');
+ const v=fval('a'),it={id:uid(),sec,pid:p?p.id:'',nombre:p?p.nombre:n,reg:!!p,ini:$('#ai').value,fin:$('#af').value,d0:p?p.dosis:'',d:v.d,u:F.a.u,moj:v.moj,ha:v.ha,est:'ACTIVO',obs:''};
+ S.it.push(it);log('CREACION',it,{nue:it.ini+' a '+it.fin+' | dosis '+it.d+' '+it.u,motivo:'Nueva programación'});sv('guardarProgramacion',it);go(S.tab)}
+
+/* ===== Ficha técnica + calculadora + reprogramar ===== */
+const MOT=['Decisión de reunión','Cambio climático/lluvia','Falta de stock','Plaga/enfermedad detectada','Ajuste de dosis','Otro'];
+function openSide(id){const i=S.it.find(x=>x.id==id),s=S.sec.find(x=>x.id==i.sec),pr=(S.prod.find(x=>x.id==i.pid)||{}).pr;
+ $('#sb').innerHTML=`<h3 style="color:${col(i.pid)}">● ${i.nombre} ${i.reg?'':'<span class="tag">NO REGISTRADO</span>'}</h3>
+ <div>Sector <b>${i.sec}</b> · Semana ${S.w} · <span>${i.est}</span></div>
+ <label>Inicio</label><input type="date" id="fi" value="${i.ini}"><label>Término</label><input type="date" id="ff" value="${i.fin}">
+ <small style="color:#667">Dosis original: ${i.d0===''?'—':i.d0+' '+i.u}</small>${ffields('e',{u:i.u,dosis:i.d,moj:i.moj,pr:pr??null},i.ha??s.ha)}
+ <label>Observaciones</label><input id="fo" value="${i.obs}">
+ <p><button class="b p" onclick="saveIt('${id}')">EDITAR (guardar)</button> <button class="b" onclick="rep('${id}')">REPROGRAMAR</button>
+ <button class="b d" onclick="del('${id}')">ELIMINAR</button> <button class="b" onclick="S.fh='${id}';go('hist')">VER HISTORIAL</button></p><div id="rp"></div>`;
+ $('#side').classList.add('open');fc('e','dc')}
+function saveIt(id){const i=S.it.find(x=>x.id==id),v=fval('e'),o=i.ini+' a '+i.fin+' | dosis '+i.d;i.ini=$('#fi').value;i.fin=$('#ff').value;i.d=v.d;i.moj=v.moj;i.ha=v.ha;i.obs=$('#fo').value;
+ log('EDICION',i,{ant:o,nue:i.ini+' a '+i.fin+' | dosis '+i.d,motivo:'Edición manual'});sv('moverProducto',i);go('gantt')}
+function del(id){if(!confirm('¿Eliminar esta programación? Quedará en el historial.'))return;const i=S.it.find(x=>x.id==id);i.est='ELIMINADO';log('ELIMINACION',i,{motivo:'Eliminado por usuario'});sv('guardarItem',i);go('gantt')}
+function rep(id){$('#rp').innerHTML=`<hr><b>Reemplazar por:</b><select id="rn" onchange="repP('${id}')">${S.prod.map(p=>`<option>${p.nombre}</option>`).join('')}</select><div id="rfm"></div>
+ <label>Nuevo inicio</label><input type="date" id="ri" value="${S.it.find(x=>x.id==id).ini}"><label>Nuevo término</label><input type="date" id="rf" value="${S.it.find(x=>x.id==id).fin}">
+ <label>Motivo</label><select id="rm">${MOT.map(m=>`<option>${m}</option>`).join('')}</select><input id="rt" placeholder="Detalle (opcional)">
+ <p><button class="b p" onclick="repOk('${id}')">Confirmar reprogramación</button></p>`;repP(id)}
+function repP(id){const i=S.it.find(x=>x.id==id),p=S.prod.find(x=>x.nombre==$('#rn').value);$('#rfm').innerHTML=ffields('r',p,i.ha??S.sec.find(x=>x.id==i.sec).ha);fc('r','dc')}
+function repOk(id){const i=S.it.find(x=>x.id==id),p=S.prod.find(x=>x.nombre==$('#rn').value),v=fval('r');i.est='REPROGRAMADO';
+ const n={id:uid(),sec:i.sec,pid:p.id,nombre:p.nombre,reg:true,ini:$('#ri').value,fin:$('#rf').value,d0:p.dosis,d:v.d,u:p.u,moj:v.moj,ha:v.ha,est:'ACTIVO',obs:'Reemplaza a '+i.nombre};S.it.push(n);
+ log('REEMPLAZO',n,{prod:i.nombre+' → '+p.nombre,ant:i.ini+' a '+i.fin+' | dosis '+i.d,nue:n.ini+' a '+n.fin+' | dosis '+n.d,motivo:$('#rm').value+($('#rt').value?': '+$('#rt').value:'')});sv('reemplazarProducto',{i,n});go('gantt')}
+
+/* ===== Programación (lista), Maestro, Sectores, Historial, Config ===== */
+function vProg(){const l=weekItems();V(weekBar()+`<table><tr><th>Sector</th><th>Producto</th><th>Inicio</th><th>Fin</th><th>Dosis</th><th>Total</th><th>Estado</th></tr>${l.map(i=>{const s=S.sec.find(x=>x.id==i.sec),r=i.d===''?null:calc(+i.d,i.u,i.moj,S.cap,i.ha??s.ha);
+ return`<tr style="cursor:pointer" onclick="openSide('${i.id}')"><td>${i.sec}</td><td><span style="color:${col(i.pid)}">●</span> ${i.nombre} ${i.reg?'':'<span class="tag">NO REG.</span>'}</td><td>${i.ini}</td><td>${i.fin}</td><td>${i.d} ${i.u}</td><td>${r?big(r.tot,r.u):'—'}</td><td>${i.est}</td></tr>`}).join('')}</table>`)}
+const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const UN=['L/cil','mL/cil','kg/cil','g/cil','L/ha','mL/ha','kg/ha','g/ha','mL/L','g/L'];
+const HEX=h=>{const a=.325,f=n=>{const k=(n+h/30)%12;return Math.round(255*(.5-a*Math.max(-1,Math.min(k-3,9-k,1)))).toString(16).padStart(2,'0')};return'#'+f(0)+f(8)+f(4)};
+const nextColor=()=>{const u=S.prod.map(p=>p.color),pal=['#43a047','#8e24aa','#fdd835','#1e88e5','#fb8c00','#00acc1','#e53935','#6d4c41','#ec407a','#7cb342','#5c6bc0','#26a69a'];return pal.find(c=>!u.includes(c))||HEX((u.length*137.5)%360)};
+const cdist=(a,b)=>{const g=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));return Math.hypot(...g(a).map((x,i)=>x-g(b)[i]))};
+function sugg(){const tk=norm($('#q').value).split(/\s+/).filter(Boolean),l=!tk.length?[]:S.prod.filter(p=>{const h=norm(p.nombre+' '+(p.ia||'')+' '+(p.cod||''));return tk.every(t=>h.includes(t))}).slice(0,6);
+ $('#sg').innerHTML=l.map(p=>`<div class="sg" onclick="pick(${S.prod.indexOf(p)})"><span style="color:${p.color}">●</span> <b>${p.nombre}</b> <small>${p.dosis===''?'sin dosis':p.dosis+' '+p.u} · ${p.moj===''?'—':p.moj} L/ha${p.aut?'':' · NO AUTORIZADO'}</small></div>`).join('')}
+function pick(k){$('#q').value=S.prod[k].nombre;$('#sg').innerHTML='';qInfo()}
+function vMaes(){V(`<div class="bar"><input id="mq" placeholder="Buscar producto, ingrediente o código…" oninput="mf()" style="min-width:260px"><button class="b p" onclick="pf()">+ Producto</button>
+ <button class="b" onclick="$('#xf').click()">⬆ Importar Excel/CSV</button><button class="b" onclick="tpl()">⬇ Plantilla</button><input type="file" id="xf" accept=".xlsx,.xls,.csv" hidden onchange="imp(this.files[0])"></div><div id="mt"></div>`);mf()}
+function mf(){const q=norm($('#mq')?.value||'');$('#mt').innerHTML=`<table><tr><th></th><th>Cód.</th><th>Producto</th><th>Ing. activo</th><th>Tipo</th><th>Dosis</th><th>Mín–Máx</th><th>Mojam.</th><th>USD/L·kg</th><th>Aut.</th></tr>${S.prod.filter(p=>norm(p.nombre+' '+(p.ia||'')+' '+(p.cod||'')).includes(q)).map(p=>
+ `<tr style="cursor:pointer" onclick="pf(${S.prod.indexOf(p)})"><td><span style="color:${p.color};font-size:20px">●</span></td><td>${p.cod||''}</td><td>${p.nombre}</td><td>${p.ia||''}</td><td>${p.tipo||''}</td><td>${p.dosis===''?'—':p.dosis+' '+p.u}</td><td>${p.min===''?'—':p.min}–${p.max===''?'—':p.max}</td><td>${p.moj===''?'—':p.moj+' L/ha'}</td><td>${p.pr==null||p.pr===''?'—':p.pr}</td><td><span class="tag ${p.aut?'ok':''}">${p.aut?'Sí':'No'}</span></td></tr>`).join('')}</table>`}
+function pf(k){const p=k==null?{nombre:'',cod:'',ia:'',tipo:'',u:'L/cil',dosis:'',min:'',max:'',moj:1000,pr:'',obs:'',aut:true,color:nextColor()}:S.prod[k],
+ I=(id,l,v,ty='text')=>`<label>${l}</label><input id="pf_${id}" type="${ty}" step="any" value="${String(v??'').replace(/"/g,'&quot;')}">`;
+ $('#sb').innerHTML=`<h3>${k==null?'Nuevo producto':'Producto'}</h3>${I('cod','Código',p.cod)}${I('nombre','Nombre comercial',p.nombre)}${I('ia','Ingrediente activo',p.ia)}${I('tipo','Tipo de producto',p.tipo)}
+ <label>Unidad de dosis</label><select id="pf_u">${UN.map(u=>`<option ${u==p.u?'selected':''}>${u}</option>`).join('')}</select>${I('dosis','Dosis predeterminada',p.dosis,'number')}${I('min','Rango mínimo',p.min,'number')}${I('max','Rango máximo',p.max,'number')}
+ ${I('moj','Mojamiento (L/ha)',p.moj,'number')}${I('pr','Precio USD por L (o kg)',p.pr,'number')}${I('obs','Observaciones técnicas',p.obs)}
+ <label>Autorización</label><select id="pf_aut"><option value="1" ${p.aut?'selected':''}>Autorizado</option><option value="0" ${p.aut?'':'selected'}>No autorizado</option></select>
+ <label>Color</label><input id="pf_color" type="color" value="${p.color}"><p><button class="b p" onclick="pfSave(${k==null?'null':k})">Guardar</button></p>`;$('#side').classList.add('open')}
+function pfSave(k){const v=i=>$('#pf_'+i).value.trim(),n=i=>v(i)===''?'':+v(i),o={cod:v('cod'),nombre:v('nombre'),ia:v('ia'),tipo:v('tipo'),u:v('u'),dosis:n('dosis'),min:n('min'),max:n('max'),moj:n('moj'),pr:n('pr'),obs:v('obs'),aut:v('aut')=='1',color:v('color')};
+ if(!o.nombre)return alert('El nombre es obligatorio');if(S.prod.some((p,i)=>i!=k&&norm(p.nombre)==norm(o.nombre)))return alert('Ya existe un producto con ese nombre');
+ if(o.min!==''&&o.max!==''&&o.min>o.max)return alert('El rango mínimo no puede superar al máximo');
+ if(o.dosis!==''&&((o.min!==''&&o.dosis<o.min)||(o.max!==''&&o.dosis>o.max))&&!confirm('La dosis está fuera del rango mín–máx. ¿Guardar igual?'))return;
+ const cl=S.prod.find((p,i)=>i!=k&&cdist(p.color,o.color)<60);if(cl)return alert('El color es muy parecido al de "'+cl.nombre+'". Elige otro.');
+ if(k==null)S.prod.push(Object.assign(o,{id:o.cod||uid()}));else{const p=S.prod[k];Object.assign(p,o);S.it.filter(i=>i.pid==p.id).forEach(i=>i.nombre=p.nombre)}
+ log('MAESTRO',{sec:'-',nombre:o.nombre},{motivo:k==null?'Producto agregado':'Producto editado'});sv('guardarProducto',k==null?o:S.prod[k]);$('#side').classList.remove('open');mf()}
+const SYN={cod:['codigo','cod','id'],nombre:['nombre','nombre comercial','producto'],ia:['ingrediente activo','ingrediente','ia'],tipo:['tipo','tipo de producto'],u:['unidad','unidad de dosis','unidad de medida'],
+ dosis:['dosis','dosis por cilindro','dosis predeterminada','dosis predeterminada por cilindro'],min:['minimo','rango minimo','dosis minima'],max:['maximo','rango maximo','dosis maxima'],
+ moj:['mojamiento','mojamiento l/ha','mojamiento predeterminado'],pr:['precio','precio usd','precio por l','precio usd/l'],obs:['observaciones','observacion','observaciones tecnicas'],aut:['autorizado','estado de autorizacion','autorizacion'],color:['color']};
+function tpl(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeffCodigo,Nombre comercial,Ingrediente activo,Tipo,Unidad,Dosis,Rango minimo,Rango maximo,Mojamiento,Precio USD,Observaciones,Autorizado,Color\n'],{type:'text/csv'}));a.download='plantilla_productos.csv';a.click()}
+function imp(f){if(!f)return;if(typeof XLSX=='undefined')return alert('Se necesita conexión a internet para cargar el lector de Excel.');const r=new FileReader();
+ r.onload=e=>{const wb=XLSX.read(e.target.result,{type:'array'});impRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}))};r.readAsArrayBuffer(f);$('#xf').value=''}
+function impRows(rows){if(!rows.length)return alert('El archivo está vacío');const map={};Object.keys(rows[0]).forEach(h=>{const k=Object.keys(SYN).find(k=>SYN[k].includes(norm(h)));if(k&&!map[k])map[k]=h});
+ if(!map.nombre)return alert('No encuentro la columna del nombre (ej: "Nombre comercial").');
+ const num=v=>{if(v===''||v==null)return'';const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?NaN:x},ok=[],er=[];
+ rows.forEach((r,i)=>{const g=k=>map[k]?r[map[k]]:'',s=k=>String(g(k)).trim(),nom=s('nombre');if(!nom)return;
+  const o={cod:s('cod'),nombre:nom,ia:s('ia'),tipo:s('tipo'),u:s('u').replace(/\s/g,''),dosis:num(g('dosis')),min:num(g('min')),max:num(g('max')),moj:num(g('moj')),pr:num(g('pr')),obs:s('obs'),color:/^#[0-9a-f]{6}$/i.test(s('color'))?s('color'):'',
+   aut:['si','autorizado','1','true','x','vigente'].includes(norm(g('aut')))},bad=[];
+  if(!UN.includes(o.u))bad.push('unidad "'+o.u+'" no válida');['dosis','min','max','moj','pr'].forEach(k=>{if(Number.isNaN(o[k]))bad.push(k+' no numérico')});
+  bad.length?er.push('Fila '+(i+2)+' ('+nom+'): '+bad.join(', ')):ok.push(o)});
+ const fd=o=>S.prod.find(p=>norm(p.nombre)==norm(o.nombre)||(o.cod&&p.cod==o.cod)),nuev=ok.filter(o=>!fd(o)).length;
+ if(!ok.length)return alert('Ninguna fila válida.\n\n'+er.slice(0,8).join('\n'));
+ if(!confirm(`Nuevos: ${nuev}\nActualizados: ${ok.length-nuev}\nOmitidos por error: ${er.length}`+(er.length?'\n\n'+er.slice(0,6).join('\n'):'')+(map.aut?'':'\n\n⚠ Sin columna de autorización: los nuevos quedarán como NO autorizados.')+(map.moj?'':'\n⚠ Sin columna de mojamiento: complétalo en cada producto.')+'\n\n¿Importar?'))return;
+ ok.forEach(o=>{const e=fd(o);if(e){Object.keys(o).forEach(k=>{if(o[k]!==''&&(k!='aut'||map.aut))e[k]=o[k]})}else S.prod.push(Object.assign(o,{id:o.cod||uid(),color:o.color||nextColor()}))});
+ log('IMPORTACION',{sec:'-',nombre:'Maestro'},{motivo:`${nuev} nuevos, ${ok.length-nuev} actualizados, ${er.length} omitidos`});sv('importarProductos',S.prod);mf()}
+function vSect(){V(`<div class="bar"><button class="b p" onclick="newS()">+ Sector</button></div><table><tr><th>Código</th><th>Nombre</th><th>Fundo</th><th>Hectáreas</th><th>Estado</th></tr>${S.sec.map(s=>
+ `<tr><td>${s.id}</td><td>${s.nombre}</td><td>${s.fundo}</td><td><input type="number" value="${s.ha}" style="width:80px" onchange="setHa('${s.id}',this.value)"></td>
+ <td><button class="b" onclick="togS('${s.id}')">${s.act?'Activo · desactivar':'Inactivo · reactivar'}</button></td></tr>`).join('')}</table>`)}
+function setHa(id,v){const s=S.sec.find(x=>x.id==id);s.ha=+v;sv('guardarSector',s)}
+function togS(id){const s=S.sec.find(x=>x.id==id);s.act=!s.act;sv('guardarSector',s);vSect()}
+function newS(){const c=(prompt('Código:')||'').trim();if(!c)return;if(S.sec.some(x=>x.id.toLowerCase()==c.toLowerCase()))return alert('Ese código ya existe');
+ const s={id:c,nombre:prompt('Nombre:',c),fundo:prompt('Fundo:')||'',ha:+prompt('Hectáreas:')||0,act:true};S.sec.push(s);sv('guardarSector',s);vSect()}
+function vHist(){const f=S.fh?S.hist.filter(h=>S.it.find(i=>i.id==S.fh&&i.sec==h.sec&&i.nombre==h.prod.split(' → ').pop())):S.hist;S.fh=null;
+ V(`<table><tr><th>Fecha</th><th>Tipo</th><th>Sector</th><th>Producto</th><th>Anterior</th><th>Nuevo</th><th>Motivo</th><th>Usuario</th></tr>${f.map(h=>`<tr><td>${h.f}</td><td>${h.tipo}</td><td>${h.sec}</td><td>${h.prod}</td><td>${h.ant||''}</td><td>${h.nue||''}</td><td>${h.motivo||''}</td><td>${h.usr}</td></tr>`).join('')||'<tr><td colspan=8>Sin modificaciones aún</td></tr>'}</table>`)}
+function vConf(){V(`<div class="box">Capacidad del cilindro (L): <input type="number" value="${S.cap}" onchange="S.cap=+this.value;sv('config',S.cap)"><p>${hasAPI?'Conectado a Google Sheets ✓':'Modo demostración (sin Google Sheets)'}</p></div>`)}
+function login(msg){return new Promise(res=>{const o=document.createElement('div');o.style.cssText='position:fixed;inset:0;background:#1b5e20ee;display:flex;align-items:center;justify-content:center;z-index:99';
+ o.innerHTML=`<div class="box" style="width:320px"><h3>🫐 Ingreso</h3>${msg?`<p style="color:#c62828">${msg}</p>`:''}<label>Tu nombre</label><input id="ln" style="width:100%" value="${CFG.nombre||''}"><br><br><label>Clave del sistema</label><input id="lc" type="password" style="width:100%"><p><button class="b p" id="lg">Entrar</button></p></div>`;
+ document.body.appendChild(o);$('#lg').onclick=()=>{const n=$('#ln').value.trim(),c=$('#lc').value;if(!n||!c)return;CFG.nombre=n;CFG.clave=c;o.remove();res()}})}
+function aplicar(x){S.sec=x.sec;S.prod=x.prod;S.it=x.it;S.hist=x.hist;S.cap=x.cap;const d=$('.demo');
+ if(S.prod.length)d.remove();else d.textContent='Maestro de productos vacío: importa tu Excel en "Maestro de productos". Las hectáreas de los sectores están en 0 hasta que las completes en "Sectores".';go('gantt')}
+async function boot(){if(!hasAPI){go('gantt');return}const d=$('.demo');d.textContent='Cargando datos de Google Sheets…';if(!CFG.clave)await login();
+ for(;;){try{const r=await call('cargar',{});
+  if(r.ok){try{localStorage.setItem('gfCFG',JSON.stringify(CFG))}catch(e){}return aplicar(r.data)}
+  if(r.error=='CLAVE_INVALIDA'){CFG.clave='';await login('Clave incorrecta');continue}
+  d.textContent='Error al cargar: '+r.error;return}catch(e){d.textContent='No se pudo conectar con Google Sheets: '+e.message;return}}}
+boot();
+</script></body></html>
