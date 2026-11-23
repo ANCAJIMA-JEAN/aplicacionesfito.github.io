@@ -46,7 +46,7 @@ const tc=h=>{const n=parseInt(h.slice(1),16);return((n>>16)*299+((n>>8)&255)*587
 function calc(d,u,moj,cap,ha){const[n,den]=u.split('/'),b={mL:1,L:1000,g:1,kg:1000}[n];if(!b||!['cil','L','ha'].includes(den))return null;
  const cph=moj/cap;const ph=den=='cil'?d*b*cph:den=='L'?d*b*moj:d*b;return{cph,pc:ph/cph,ph,tot:ph*ha,cil:Math.ceil(cph*ha),u:(n=='mL'||n=='L')?'mL':'g'}}
 const big=(v,u)=>v>=1000?(v/1000).toFixed(2)+(u=='mL'?' L':' kg'):(+v.toFixed(2))+' '+u;
-const API_URL='PEGA_AQUI_LA_URL_DE_LA_APLICACION_WEB';   // URL de Apps Script (termina en /exec)
+const API_URL='https://script.google.com/macros/s/AKfycbwfPJ5Uw_DojFLmlmGGYa1OX66uOJVtwO-LvaglMTeIsZA4wDZg8aRNFMSrlr1ce8N5/exec';   // URL de Apps Script (termina en /exec)
 const hasAPI=/^https:\/\//.test(API_URL),MAPA={moverProducto:'guardarItem',guardarProgramacion:'guardarItem',reemplazarProducto:'guardarItems'};
 let CFG={};try{CFG=JSON.parse(localStorage.getItem('gfCFG'))||{}}catch(e){}
 const call=(a,p)=>fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({accion:a,payload:p,usuario:CFG.usuario,clave:CFG.clave})}).then(r=>r.json());
